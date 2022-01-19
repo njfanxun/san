@@ -19,7 +19,7 @@ ssl._create_default_https_context = ssl._create_unverified_context
 # torch.backends.cudnn.deterministic = True
 
 
-def main():
+def run():
     opt = options.Options()
     os.makedirs(opt.output_dir, exist_ok=True)
     # background upsampler
@@ -80,4 +80,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    run()
