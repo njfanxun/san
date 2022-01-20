@@ -3,6 +3,7 @@ from torch import nn
 import torch.nn.functional
 
 
+
 class ConvNormLReLU(nn.Sequential):
     def __init__(self, in_ch, out_ch, kernel_size=3, stride=1, padding=1, pad_mode="reflect", groups=1, bias=False):
         pad_layer = {
@@ -46,19 +47,17 @@ class InvertedResBlock(nn.Module):
         return out
 
 
-class Generator(nn.Module):
-    def __init__(self, model_path, ):
+class AnimeGAN2(nn.Module):
+    def __init__(self):
         super().__init__()
-        self.model_path = model_path
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.block_a = nn.Sequential(
             ConvNormLReLU(3, 32, kernel_size=7, padding=3),
-            ConvNormLReLU(32, 64, stride=2, padding=(0,1,0,1)),
+            ConvNormLReLU(32, 64, stride=2, padding=(0, 1, 0, 1)),
             ConvNormLReLU(64, 64)
         )
 
         self.block_b = nn.Sequential(
-            ConvNormLReLU(64, 128, stride=2, padding=(0,1,0,1)),
+            ConvNormLReLU(64, 128, stride=2, padding=(0, 1, 0, 1)),
             ConvNormLReLU(128, 128)
         )
 
@@ -86,8 +85,6 @@ class Generator(nn.Module):
             nn.Conv2d(32, 3, kernel_size=1, stride=1, padding=0, bias=False),
             nn.Tanh()
         )
-        self.load_state_dict(torch.load(self.model_path, map_location=self.device))
-        self.to(self.device).eval()
 
     def forward(self, inp, align_corners=True):
         out = self.block_a(inp)
