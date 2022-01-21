@@ -45,7 +45,6 @@ class Options(object):
     @property
     def output_dir(self) -> str:
         return './outputs'
-
     @property
     def ext(self) -> str:
         return 'auto'

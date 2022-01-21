@@ -37,7 +37,7 @@ def runGFP():
     os.makedirs(opt.output_dir, exist_ok=True)
     # background upsampler
     bg_upsampler = RealESRGANer(
-        scale=4,
+        scale=opt.upscale,
         model_path=opt.realesr_model_path,
         model=RRDBNet(num_in_ch=3,
                       num_out_ch=3,
@@ -69,58 +69,45 @@ def runGFP():
         else:
             extension = opt.ext
         # restore faces and background if necessary
-        crop_imgs, __, restored_img = restorer.enhance(
+        __, __, restored_img = restorer.enhance(
             input_img,
             has_aligned=opt.aligned,
             only_center_face=opt.only_center_face,
             paste_back=opt.paste_back)
-
-        crop_img = crop_imgs[0]
-        if crop_img is not None:
-            _, _, face_img = restorer.enhance(
-                crop_img,
-                has_aligned=False,
-                only_center_face=True,
-                paste_back=True
-            )
-            if face_img is not None:
-                save_face_path = os.path.join(opt.output_dir, f'{basename}_f.{extension}')
-                imwrite(face_img, save_face_path)
-                print(f'Results are in the [{save_face_path}]')
-            else:
-                print("no face")
-
         # save restored img
         if restored_img is not None:
             save_restore_path = os.path.join(opt.output_dir, f'{basename}_r.{extension}')
             imwrite(restored_img, save_restore_path)
             print(f'Results are in the [{save_restore_path}]')
+            return save_restore_path
+        return None
 
 
-def runAnime():
-    animer = AnimeGANer(opt.anime_model_path)
-    img_list = sorted(glob.glob(os.path.join(opt.output_dir, '*')))
-    for img_path in img_list:
-        # read image
-        img_name = os.path.basename(img_path)
-        print(f'AnimeGan Processing {img_name} ...')
-        basename, ext = os.path.splitext(img_name)
-        if opt.ext == 'auto':
-            extension = ext[1:]
-        else:
-            extension = opt.ext
-        input_img = cv2.imread(img_path, cv2.IMREAD_COLOR)
-        face_img = animer.enhance(input_img)
-        if face_img is not None:
-            save_face_path = os.path.join(opt.output_dir, f'anime_face_{basename}.{extension}')
-            imwrite(face_img, save_face_path)
-            print(f'Results are in the [{save_face_path}]')
-        # if restored_img is not None:
-        #     save_anime_path = os.path.join(opt.output_dir, f'anime_{basename}.{extension}')
-        #     imwrite(face_img, save_anime_path)
-        #     print(f'Results are in the [{save_anime_path}]')
+def runAnime(path: str):
+    animer = AnimeGANer(opt.anime_model_path, upscale=opt.upscale)
+
+    # read image
+    img_name = os.path.basename(path)
+    print(f'AnimeGan Processing {img_name} ...')
+    basename, ext = os.path.splitext(img_name)
+    if opt.ext == 'auto':
+        extension = ext[1:]
+    else:
+        extension = opt.ext
+    input_img = cv2.imread(img_path, cv2.IMREAD_COLOR)
+    face_img = animer.enhanceFace(input_img)
+    if face_img is not None:
+        save_face_path = os.path.join(opt.output_dir, f'anime_face_{basename}.png')
+        imwrite(face_img, save_face_path)
+        print(f'Results are in the [{save_face_path}]')
+    restored_img = animer.enhance(input_img)
+    if restored_img is not None:
+        save_anime_path = os.path.join(opt.output_dir, f'anime_full_{basename}.{extension}')
+        imwrite(restored_img, save_anime_path)
+        print(f'Results are in the [{save_anime_path}]')
 
 
 if __name__ == '__main__':
-    # runGFP()
-    runAnime()
+    img_path = runGFP()
+    if img_path is not None:
+        runAnime(img_path)
