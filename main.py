@@ -1,3 +1,5 @@
+import time
+
 import cv2
 import glob
 from PIL import Image
@@ -11,103 +13,133 @@ from gfpgan import GFPGANer
 import ssl
 from basicsr.utils import imwrite
 import options
+from watchdog.observers import Observer
+from watchdog.events import PatternMatchingEventHandler
 
 ssl._create_default_https_context = ssl._create_unverified_context
-
 torch.backends.cudnn.enabled = False
 torch.backends.cudnn.benchmark = False
 torch.backends.cudnn.deterministic = True
+
 opt = options.Options()
 
 
-def load_image(image_path, x32=False):
-    img = Image.open(image_path).convert("RGB")
+def get_time(f):
+    def inner(*arg, **kwarg):
+        s_time = time.time()
+        res = f(*arg, **kwarg)
+        e_time = time.time()
+        print('耗时：{}秒'.format(e_time - s_time))
+        return res
 
-    if x32:
-        def to_32s(x):
-            return 256 if x < 256 else x - x % 32
-
-        w, h = img.size
-        img = img.resize((to_32s(w), to_32s(h)))
-
-    return img
+    return inner
 
 
-def runGFP():
-    os.makedirs(opt.output_dir, exist_ok=True)
-    # background upsampler
-    bg_upsampler = RealESRGANer(
-        scale=opt.upscale,
-        model_path=opt.realesr_model_path,
-        model=RRDBNet(num_in_ch=3,
-                      num_out_ch=3,
-                      num_feat=64,
-                      num_block=23,
-                      num_grow_ch=32,
-                      scale=2),
-        tile=opt.bg_tile,
-        tile_pad=0,
-        pre_pad=0,
-        half=False)  # need to set False in CPU mode
+class FileWatchHandler(PatternMatchingEventHandler):
 
-    # set up GFPGAN restorer
-    restorer = GFPGANer(model_path=opt.gfp_model_path,
-                        upscale=opt.upscale,
-                        arch=opt.arch,
-                        channel_multiplier=opt.channel,
-                        bg_upsampler=bg_upsampler)
+    def __init__(self, patterns=None, ignore_patterns=None, ignore_directories=False, case_sensitive=False):
+        super().__init__(patterns, ignore_patterns, ignore_directories, case_sensitive)
+        self.restorer = None
+        self.animer = None
+        self.restorer_image = 'gfp_'
+        self.anime_face_image = 'anime_face_'
+        self.anime_full_image = 'anime_full_'
 
-    img_list = sorted(glob.glob(os.path.join(opt.input_dir, '*')))
-    for img_path in img_list:
-        # read image
-        img_name = os.path.basename(img_path)
-        print(f'GFPGan Processing {img_name} ...')
+    def prepareGANs(self, ):
+        # background upsampler
+        net = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=2)
+        bg_upsampler = RealESRGANer(scale=opt.upscale, model_path=opt.realesr_model_path,
+                                    model=net, tile=opt.bg_tile, tile_pad=0, pre_pad=0, half=False)
+
+        self.restorer = GFPGANer(model_path=opt.gfp_model_path, upscale=opt.upscale, arch=opt.arch,
+                                 channel_multiplier=opt.channel, bg_upsampler=bg_upsampler)
+        self.animer = AnimeGANer(opt.anime_model_path, upscale=opt.upscale)
+        print('完成对抗网络模型加载...')
+
+    def restorer_img_path(self, img_name: str):
         basename, ext = os.path.splitext(img_name)
-        input_img = cv2.imread(img_path, cv2.IMREAD_COLOR)
         if opt.ext == 'auto':
             extension = ext[1:]
         else:
             extension = opt.ext
-        # restore faces and background if necessary
-        __, __, restored_img = restorer.enhance(
-            input_img,
-            has_aligned=opt.aligned,
-            only_center_face=opt.only_center_face,
-            paste_back=opt.paste_back)
-        # save restored img
+        return os.path.join(opt.output_dir, f'{self.restorer_image}{basename}.{extension}')
+
+    def anime_full_img_path(self, img_name: str):
+        basename, ext = os.path.splitext(img_name)
+        if opt.ext == 'auto':
+            extension = ext[1:]
+        else:
+            extension = opt.ext
+        return os.path.join(opt.output_dir, f'{self.anime_full_image}{basename}.{extension}')
+
+    def anime_face_img_path(self, img_name: str):
+        basename, ext = os.path.splitext(img_name)
+        return os.path.join(opt.output_dir, f'{self.anime_face_image}{basename}.png')
+
+    @get_time
+    def gfp_process(self, img_path: str) -> (bool, str):
+        img_name = os.path.basename(img_path)
+        input_img = cv2.imread(img_path, cv2.IMREAD_COLOR)
+        __, __, restored_img = self.restorer.enhance(input_img, has_aligned=opt.aligned,
+                                                     only_center_face=opt.only_center_face, paste_back=opt.paste_back)
         if restored_img is not None:
-            save_restore_path = os.path.join(opt.output_dir, f'{basename}_r.{extension}')
-            imwrite(restored_img, save_restore_path)
-            print(f'Results are in the [{save_restore_path}]')
-            return save_restore_path
-        return None
+            restored_img_path = self.restorer_img_path(img_name)
+            imwrite(restored_img, restored_img_path)
+            print(f'完成图像增强:{img_name}')
+            return True, restored_img_path
+        else:
+            print(f'图像增强处理失败:{img_path}')
+            return False, None
 
+    @get_time
+    def anime_process(self, img_path: str):
+        img_name = os.path.basename(img_path)
+        input_img = cv2.imread(img_path, cv2.IMREAD_COLOR)
+        face_img = self.animer.enhanceFace(input_img)
+        if face_img is not None:
+            save_face_path = self.anime_face_img_path(img_name)
+            imwrite(face_img, save_face_path)
+        full_img = self.animer.enhance(input_img)
+        if full_img is not None:
+            save_full_path = self.anime_full_img_path(img_name)
+            imwrite(full_img, save_full_path)
+        print(f'完成漫画风格化{img_name}')
 
-def runAnime(path: str):
-    animer = AnimeGANer(opt.anime_model_path, upscale=opt.upscale)
+    def on_created(self, event):
+        print('===============================================================================')
+        print(f'开始处理图像:{event.src_path}')
+        success, img_path = self.gfp_process(event.src_path)
+        if success:
+            self.anime_process(img_path)
+        print('===============================================================================')
 
-    # read image
-    img_name = os.path.basename(path)
-    print(f'AnimeGan Processing {img_name} ...')
-    basename, ext = os.path.splitext(img_name)
-    if opt.ext == 'auto':
-        extension = ext[1:]
-    else:
-        extension = opt.ext
-    input_img = cv2.imread(img_path, cv2.IMREAD_COLOR)
-    face_img = animer.enhanceFace(input_img)
-    if face_img is not None:
-        save_face_path = os.path.join(opt.output_dir, f'anime_face_{basename}.png')
-        imwrite(face_img, save_face_path)
-        print(f'Results are in the [{save_face_path}]')
-    restored_img = animer.enhance(input_img)
-    if restored_img is not None:
-        save_anime_path = os.path.join(opt.output_dir, f'anime_full_{basename}.{extension}')
-        imwrite(restored_img, save_anime_path)
-        print(f'Results are in the [{save_anime_path}]')
+    def on_deleted(self, event):
+        img_name = os.path.basename(event.src_path)
+        restorer_img_path = self.restorer_img_path(img_name=img_name)
+        img_name = os.path.basename(restorer_img_path)
+        anime_full_img_path = self.anime_full_img_path(img_name=img_name)
+        anime_face_img_path = self.anime_face_img_path(img_name=img_name)
+        if os.path.exists(restorer_img_path):
+            os.remove(restorer_img_path)
+        if os.path.exists(anime_face_img_path):
+            os.remove(anime_face_img_path)
+        if os.path.exists(anime_full_img_path):
+            os.remove(anime_full_img_path)
 
 
 if __name__ == '__main__':
-    img_path = runGFP()
-    if img_path is not None:
-        runAnime(img_path)
+    os.makedirs(opt.output_dir, exist_ok=True)
+
+    event_handler = FileWatchHandler(patterns=['*.jpg', '*.png'], ignore_patterns=None,
+                                     ignore_directories=True, case_sensitive=True)
+    event_handler.prepareGANs()
+    observer = Observer()
+    observer.schedule(event_handler, opt.input_dir, recursive=False)
+    observer.start()
+    print("开始监视文件夹:%s" % opt.input_dir)
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        observer.stop()
+    observer.join()

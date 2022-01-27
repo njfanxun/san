@@ -11,7 +11,7 @@ from animegan.animegan import AnimeGAN2
 from torchvision.transforms.functional import to_tensor, to_pil_image
 
 
-class AnimeGANer():
+class AnimeGANer:
 
     def __init__(self, model_path, upscale=2):
         super().__init__()

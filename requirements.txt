@@ -14,3 +14,4 @@ argparse~=1.4.0
 Pillow~=9.0.0
 gfpgan~=0.2.4
 realesrgan
+watchdog==2.1.6

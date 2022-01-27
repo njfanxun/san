@@ -1,5 +1,7 @@
 import os.path
 
+project_path = os.path.abspath(os.curdir)
+
 
 class Options(object):
     @property
@@ -16,11 +18,11 @@ class Options(object):
 
     @property
     def gfp_model_path(self) -> str:
-        return 'weights/GFPGANCleanv1-NoCE-C2.pth'
+        return os.path.join(project_path, 'weights/GFPGANCleanv1-NoCE-C2.pth')
 
     @property
     def realesr_model_path(self) -> str:
-        return 'weights/RealESRGAN_x2plus.pth'
+        return os.path.join(project_path, 'weights/RealESRGAN_x2plus.pth')
 
     @property
     def bg_tile(self) -> int:
@@ -28,7 +30,7 @@ class Options(object):
 
     @property
     def input_dir(self) -> str:
-        return './inputs'
+        return os.path.join(project_path, 'inputs')
 
     @property
     def only_center_face(self) -> bool:
@@ -44,7 +46,8 @@ class Options(object):
 
     @property
     def output_dir(self) -> str:
-        return './outputs'
+        return os.path.join(project_path, 'outputs')
+
     @property
     def ext(self) -> str:
         return 'auto'
@@ -55,4 +58,4 @@ class Options(object):
 
     @property
     def anime_model_path(self) -> str:
-        return 'weights/face_paint_512_v2.pt'
+        return os.path.join(project_path, 'weights/face_paint_512_v2.pt')

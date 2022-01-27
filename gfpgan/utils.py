@@ -12,7 +12,7 @@ from gfpgan.archs.gfpganv1_clean_arch import GFPGANv1Clean
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-class GFPGANer():
+class GFPGANer:
     """Helper for restoration with GFPGAN.
 
     It will detect and crop faces, and then resize the faces to 512x512.
