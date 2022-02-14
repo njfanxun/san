@@ -18,7 +18,7 @@ class Options(object):
 
     @property
     def gfp_model_path(self) -> str:
-        return os.path.join(project_path, 'weights/GFPGANCleanv1-NoCE-C2.pth')
+        return os.path.join(project_path, 'weights/GFPGANv1.3.pth')
 
     @property
     def realesr_model_path(self) -> str:

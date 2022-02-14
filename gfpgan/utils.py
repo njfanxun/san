@@ -6,13 +6,14 @@ from basicsr.utils.download_util import load_file_from_url
 from facexlib.utils.face_restoration_helper import FaceRestoreHelper
 from torchvision.transforms.functional import normalize
 
+from gfpgan.archs.gfpgan_bilinear_arch import GFPGANBilinear
 from gfpgan.archs.gfpganv1_arch import GFPGANv1
 from gfpgan.archs.gfpganv1_clean_arch import GFPGANv1Clean
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-class GFPGANer:
+class GFPGANer():
     """Helper for restoration with GFPGAN.
 
     It will detect and crop faces, and then resize the faces to 512x512.
@@ -31,6 +32,7 @@ class GFPGANer:
     def __init__(self, model_path, upscale=2, arch='clean', channel_multiplier=2, bg_upsampler=None):
         self.upscale = upscale
         self.bg_upsampler = bg_upsampler
+
         # initialize model
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         # initialize the GFP-GAN
@@ -46,7 +48,19 @@ class GFPGANer:
                 different_w=True,
                 narrow=1,
                 sft_half=True)
-        else:
+        elif arch == 'bilinear':
+            self.gfpgan = GFPGANBilinear(
+                out_size=512,
+                num_style_feat=512,
+                channel_multiplier=channel_multiplier,
+                decoder_load_path=None,
+                fix_decoder=False,
+                num_mlp=8,
+                input_is_latent=True,
+                different_w=True,
+                narrow=1,
+                sft_half=True)
+        elif arch == 'original':
             self.gfpgan = GFPGANv1(
                 out_size=512,
                 num_style_feat=512,
@@ -64,7 +78,7 @@ class GFPGANer:
             face_size=512,
             crop_ratio=(1, 1),
             det_model='retinaface_resnet50',
-            save_ext='jpg',
+            save_ext='png',
             device=self.device)
 
         if model_path.startswith('https://'):
@@ -89,8 +103,7 @@ class GFPGANer:
         else:
             self.face_helper.read_image(img)
             # get face landmarks for each face
-            self.face_helper.get_face_landmarks_5(only_center_face=only_center_face,
-                                                  eye_dist_threshold=5)
+            self.face_helper.get_face_landmarks_5(only_center_face=only_center_face, eye_dist_threshold=5)
             # eye_dist_threshold=5: skip faces whose eye distance is smaller than 5 pixels
             # TODO: even with eye_dist_threshold, it will still introduce wrong detections and restorations.
             # align and warp each face
