@@ -59,3 +59,7 @@ class Options(object):
     @property
     def anime_model_path(self) -> str:
         return os.path.join(project_path, 'weights/face_paint_512_v2.pt')
+
+    @property
+    def face_model_path(self) -> str:
+        return os.path.join(project_path, 'weights/shape_predictor_68_face_landmarks.dat')
